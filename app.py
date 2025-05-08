@@ -2,9 +2,8 @@ import streamlit as st
 from streamlit_option_menu import option_menu
 import pandas as pd
 import time
-from dotenv import load_dotenv
-import os
-from utils.data import get_real_diagnosis
+import requests
+from datetime import datetime
 from utils.data import (
     available_symptoms,
     mock_diagnosis_results,
@@ -13,19 +12,12 @@ from utils.data import (
     appointments_data
 )
 from utils.helpers import (
-    display_symptom_selector,  # Nome corrigido
+    display_symptom_selector,
     display_diagnosis_results,
     display_appointments,
     display_medical_history,
     display_profile
 )
-
-# Carrega variáveis de ambiente
-load_dotenv()
-
-# Configurações da API Infermedica
-INFERMEDICA_APP_ID = os.getenv('INFERMEDICA_APP_ID', 'sua_app_id')
-INFERMEDICA_APP_KEY = os.getenv('INFERMEDICA_APP_KEY', 'sua_app_key')
 
 # Configuração da página
 st.set_page_config(
@@ -39,7 +31,6 @@ st.set_page_config(
 def load_css():
     with open("assets/styles.css") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
 load_css()
 
 # Estado da sessão
@@ -52,21 +43,116 @@ if 'diagnosis_results' not in st.session_state:
 if 'is_loading' not in st.session_state:
     st.session_state.is_loading = False
 
+# Funções para API de Dados Abertos
+def get_health_units(uf=None, city=None):
+    """Busca unidades de saúde na API do Ministério da Saúde"""
+    try:
+        url = "https://apidadosabertos.saude.gov.br/cnes/estabelecimentos"
+        params = {}
+        if uf and uf != 'Todos':
+            params['uf'] = uf
+        if city:
+            params['municipio'] = city
+            
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        return response.json().get('estabelecimentos', [])
+    except Exception as e:
+        st.error(f"Erro ao buscar unidades de saúde: {str(e)}")
+        return []
+
+def get_epidemiological_data(disease='covid'):
+    """Busca dados epidemiológicos"""
+    try:
+        url = f"https://apidadosabertos.saude.gov.br/{disease}/casos"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        st.error(f"Erro ao buscar dados epidemiológicos: {str(e)}")
+        return None
+
+def generate_diagnosis(symptoms, uf=None):
+    """Gera diagnóstico baseado em sintomas e dados epidemiológicos da região"""
+    try:
+        # Busca dados epidemiológicos regionais
+        epi_data = get_epidemiological_data()
+        regional_cases = 0
+        
+        if epi_data and 'casos' in epi_data:
+            if uf:
+                regional_cases = sum([c['casos'] for c in epi_data['casos'] if c.get('uf') == uf])
+            else:
+                regional_cases = sum([c['casos'] for c in epi_data['casos']])
+        
+        # Lógica de diagnóstico adaptada
+        conditions = []
+        
+        # COVID-19 (prioriza se houver muitos casos na região)
+        if regional_cases > 1000 and any(sym in symptoms for sym in ['febre', 'tosse', 'dificuldade respiratória']):
+            prob = min(0.3 + (regional_cases / 10000), 0.9)
+            conditions.append({
+                'name': 'COVID-19',
+                'probability': round(prob, 2),
+                'description': f"Infecção respiratória viral ({regional_cases} casos recentes na região)"
+            })
+        
+        # Outras condições baseadas em sintomas
+        if 'febre' in symptoms and 'dor de garganta' in symptoms:
+            conditions.append({
+                'name': 'Amigdalite',
+                'probability': 0.65,
+                'description': 'Inflamação das amígdalas'
+            })
+            
+        if 'dor abdominal' in symptoms and 'náusea' in symptoms:
+            conditions.append({
+                'name': 'Gastrite',
+                'probability': 0.7,
+                'description': 'Inflamação do revestimento do estômago'
+            })
+        
+        if not conditions:
+            conditions.append({
+                'name': 'Resfriado Comum',
+                'probability': 0.5,
+                'description': 'Infecção viral leve do trato respiratório'
+            })
+        
+        # Ordena por probabilidade
+        conditions.sort(key=lambda x: x['probability'], reverse=True)
+        
+        # Recomendações baseadas na gravidade
+        recommendations = [
+            'Hidrate-se adequadamente',
+            'Descanse o suficiente'
+        ]
+        
+        if any(c['probability'] > 0.7 for c in conditions):
+            recommendations.append('Consulte uma unidade de saúde para avaliação')
+        if 'dificuldade respiratória' in symptoms:
+            recommendations.append('Procure atendimento urgente se piorar')
+        
+        return {
+            'possible_conditions': conditions,
+            'recommendations': recommendations,
+            'analyzed_symptoms': symptoms,
+            'regional_data': f"Dados regionais: {regional_cases} casos recentes" if regional_cases else ""
+        }
+        
+    except Exception as e:
+        st.error(f"Erro ao gerar diagnóstico: {str(e)}")
+        return None
+
 # Navegação principal
 def main_navigation():
     with st.sidebar:
         selected = option_menu(
             menu_title="Menu Principal",
-            options=["Início", "Diagnóstico", "Consultas", "Histórico", "Perfil"],
-            icons=["house", "search-heart", "calendar-check", "clock-history", "person"],
+            options=["Início", "Diagnóstico", "Unidades de Saúde", "Dados Epidemiológicos", "Consultas", "Histórico", "Perfil"],
+            icons=["house", "search-heart", "hospital", "activity", "calendar-check", "clock-history", "person"],
             menu_icon="menu-button-wide",
-            default_index=["Início", "Diagnóstico", "Consultas", "Histórico", "Perfil"].index(
-                "Início" if st.session_state.current_page == 'home' 
-                else 'Diagnóstico' if st.session_state.current_page == 'diagnosis'
-                else 'Consultas' if st.session_state.current_page == 'appointments'
-                else 'Histórico' if st.session_state.current_page == 'history'
-                else 'Perfil'
-            ),
+            default_index=0,
             styles={
                 "container": {"padding": "0!important", "background-color": "#f8f9fa"},
                 "icon": {"color": "orange", "font-size": "18px"}, 
@@ -79,6 +165,10 @@ def main_navigation():
             st.session_state.current_page = 'home'
         elif selected == "Diagnóstico":
             st.session_state.current_page = 'diagnosis'
+        elif selected == "Unidades de Saúde":
+            st.session_state.current_page = 'health_units'
+        elif selected == "Dados Epidemiológicos":
+            st.session_state.current_page = 'epi_data'
         elif selected == "Consultas":
             st.session_state.current_page = 'appointments'
         elif selected == "Histórico":
@@ -91,98 +181,155 @@ def home_page():
     st.title("🏥 MediAssist")
     st.markdown("Bem-vindo ao seu assistente de telemedicina pessoal")
     
-    # Cartões de funcionalidades
     cols = st.columns(2)
     with cols[0]:
         with st.container(border=True, height=200):
             st.markdown("🔍 **Diagnóstico de Sintomas**")
-            st.markdown("Identifique possíveis condições médicas com base nos seus sintomas")
+            st.markdown("Identifique possíveis condições médicas")
             if st.button("Acessar Diagnóstico", key="diagnosis_btn"):
                 st.session_state.current_page = 'diagnosis'
     
     with cols[1]:
         with st.container(border=True, height=200):
-            st.markdown("📅 **Agendar Consultas**")
-            st.markdown("Marque consultas com nossos especialistas")
-            if st.button("Ver Consultas", key="appointments_btn"):
-                st.session_state.current_page = 'appointments'
+            st.markdown("🏥 **Unidades de Saúde**")
+            st.markdown("Encontre hospitais e UBS próximos")
+            if st.button("Buscar Unidades", key="units_btn"):
+                st.session_state.current_page = 'health_units'
     
     cols = st.columns(2)
     with cols[0]:
         with st.container(border=True, height=200):
-            st.markdown("⏳ **Histórico Médico**")
-            st.markdown("Acesse seu histórico de diagnósticos e consultas")
-            if st.button("Ver Histórico", key="history_btn"):
-                st.session_state.current_page = 'history'
+            st.markdown("📊 **Dados Epidemiológicos**")
+            st.markdown("Casos de doenças na sua região")
+            if st.button("Ver Dados", key="epi_btn"):
+                st.session_state.current_page = 'epi_data'
     
     with cols[1]:
         with st.container(border=True, height=200):
-            st.markdown("👤 **Perfil do Paciente**")
-            st.markdown("Gerencie suas informações pessoais e médicas")
-            if st.button("Acessar Perfil", key="profile_btn"):
-                st.session_state.current_page = 'profile'
-    
-    # Acesso rápido
-    st.subheader("Acesso Rápido")
-    with st.expander("Verificar sintomas"):
-        st.write("Selecione seus sintomas para uma avaliação preliminar")
-    
-    with st.expander("Consultar resultados de exames"):
-        st.write("Acesse seus exames laboratoriais e de imagem")
-    
-    with st.expander("Monitorar sinais vitais"):
-        st.write("Registre e acompanhe seus sinais vitais ao longo do tempo")
+            st.markdown("📅 **Agendar Consultas**")
+            st.markdown("Marque consultas com especialistas")
+            if st.button("Ver Consultas", key="appointments_btn"):
+                st.session_state.current_page = 'appointments'
 
 def diagnosis_page():
     st.title("🔍 Diagnóstico de Sintomas")
     
-    # Seletor de sintomas
     display_symptom_selector()
     
-    # Informações adicionais para diagnóstico preciso
     with st.expander("Informações adicionais para diagnóstico preciso"):
         age = st.number_input("Idade", min_value=0, max_value=120, value=30)
-        sex = st.radio("Sexo biológico", ["male", "female"], format_func=lambda x: "Masculino" if x == "male" else "Feminino")
+        uf = st.selectbox("UF (opcional)", ['Não informar'] + sorted([
+            'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO',
+            'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI',
+            'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+        ]))
     
-    # Botão de análise
     if st.button("Analisar Sintomas", 
                 disabled=len(st.session_state.user_symptoms) == 0,
-                type="primary",
-                use_container_width=True):
+                type="primary"):
         st.session_state.is_loading = True
-        
-        # Usar API real se disponível, senão usar mock
-        if INFERMEDICA_APP_ID != 'sua_app_id':
-            diagnosis_data = get_real_diagnosis(st.session_state.user_symptoms, age, sex)
-            if diagnosis_data:
-                st.session_state.diagnosis_results = process_infermedica_response(diagnosis_data)
-            else:
-                st.session_state.diagnosis_results = mock_diagnosis_results(st.session_state.user_symptoms)
-                st.warning("Usando dados simulados devido a erro na API")
-        else:
-            st.session_state.diagnosis_results = mock_diagnosis_results(st.session_state.user_symptoms)
-            st.info("Usando dados simulados. Configure as credenciais da API para diagnóstico real.")
-        
-        st.session_state.is_loading = False
         st.rerun()
     
-    # Simulação de carregamento
     if st.session_state.is_loading:
         with st.status("Analisando sintomas...", expanded=True) as status:
-            st.write("Consultando base de dados médicos...")
-            time.sleep(2)
-            st.write("Comparando com casos similares...")
-            time.sleep(1)
-            st.write("Gerando possíveis diagnósticos...")
-            time.sleep(1)
-            st.session_state.diagnosis_results = mock_diagnosis_results(st.session_state.user_symptoms)
+            st.write("Consultando dados de saúde pública...")
+            
+            # Usa a função com a API do governo
+            st.session_state.diagnosis_results = generate_diagnosis(
+                st.session_state.user_symptoms,
+                uf if uf != 'Não informar' else None
+            )
+            
+            if not st.session_state.diagnosis_results:
+                st.session_state.diagnosis_results = mock_diagnosis_results(st.session_state.user_symptoms)
+                st.warning("Usando dados simulados devido a problema na API")
+            
             st.session_state.is_loading = False
             status.update(label="Análise concluída!", state="complete", expanded=False)
         st.rerun()
     
-    # Exibir resultados
     if st.session_state.diagnosis_results:
         display_diagnosis_results()
+
+def health_units_page():
+    st.title("🏥 Unidades de Saúde Próximas")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        uf = st.selectbox("Selecione seu estado:", 
+                         ['Todos'] + sorted([
+                             'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO',
+                             'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI',
+                             'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+                         ]))
+    with col2:
+        city = st.text_input("Ou digite seu município:")
+    
+    if st.button("Buscar Unidades de Saúde"):
+        with st.spinner("Buscando unidades..."):
+            units = get_health_units(uf if uf != 'Todos' else None, city if city else None)
+            
+            if units:
+                st.subheader(f"Unidades encontradas: {len(units)}")
+                
+                for unit in units[:10]:  # Limita a 10 resultados
+                    with st.expander(f"🏥 {unit.get('no_fantasia', 'Unidade de Saúde')}"):
+                        cols = st.columns(2)
+                        with cols[0]:
+                            st.write(f"**Endereço:** {unit.get('no_logradouro', 'N/A')}, {unit.get('nu_numero', 'N/A')}")
+                            st.write(f"**Bairro:** {unit.get('no_bairro', 'N/A')}")
+                            st.write(f"**Município:** {unit.get('no_municipio', 'N/A')} - {unit.get('uf', 'N/A')}")
+                        with cols[1]:
+                            st.write(f"**Tipo:** {unit.get('ds_tipo_unidade', 'N/A')}")
+                            st.write(f"**Telefone:** {unit.get('nu_telefone', 'N/A')}")
+                            st.write(f"**Atendimento SUS:** {'Sim' if unit.get('co_atu_sus', 0) == 1 else 'Não'}")
+            else:
+                st.warning("Nenhuma unidade encontrada com os critérios informados")
+
+def epidemiological_data_page():
+    st.title("📊 Dados Epidemiológicos")
+    
+    disease = st.selectbox("Selecione a doença:", 
+                          ['COVID-19', 'Dengue', 'Influenza', 'Zika'])
+    uf = st.selectbox("Filtrar por UF:", 
+                      ['Todas'] + sorted([
+                          'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO',
+                          'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI',
+                          'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+                      ]))
+    
+    if st.button("Buscar Dados Atualizados"):
+        with st.spinner("Obtendo dados oficiais..."):
+            data = get_epidemiological_data(disease.lower())
+            
+            if data and 'casos' in data:
+                df = pd.DataFrame(data['casos'])
+                
+                if uf != 'Todas':
+                    df = df[df['uf'] == uf]
+                
+                if not df.empty:
+                    st.subheader(f"Casos de {disease} em {uf if uf != 'Todas' else 'todo Brasil'}")
+                    
+                    cols = st.columns(2)
+                    with cols[0]:
+                        st.dataframe(df.head(10))
+                    with cols[1]:
+                        if 'data' in df.columns:
+                            df['data'] = pd.to_datetime(df['data'])
+                            df = df.sort_values('data')
+                            st.line_chart(df.set_index('data')['casos'])
+                    
+                    st.download_button(
+                        "Baixar dados completos",
+                        df.to_csv(index=False).encode('utf-8'),
+                        f"dados_{disease.lower()}_{uf if uf != 'Todas' else 'brasil'}.csv",
+                        "text/csv"
+                    )
+                else:
+                    st.info("Nenhum caso registrado para os filtros selecionados")
+            else:
+                st.error("Não foi possível obter os dados. Tente novamente mais tarde.")
 
 def appointments_page():
     st.title("📅 Consultas Médicas")
@@ -238,7 +385,7 @@ def appointments_page():
                 st.write(f"**Especialidade:** {selected_doctor['specialty']}")
                 st.write(f"**Tipo:** {selected_doctor['appointment_type'].capitalize()}")
                 
-                date = st.date_input("Data da consulta", min_value=pd.to_datetime('today'))
+                date = st.date_input("Data da consulta", min_value=datetime.now())
                 time_options = ["09:00", "10:30", "14:00", "15:30", "17:00"]
                 time = st.selectbox("Horário", time_options)
                 reason = st.text_area("Motivo da consulta")
@@ -283,32 +430,7 @@ def history_page():
 def profile_page():
     st.title("👤 Perfil do Paciente")
     display_profile()
-def process_infermedica_response(response):
-    """Processa a resposta da API Infermedica para o formato do nosso app"""
-    conditions = []
-    for condition in response.get('conditions', []):
-        conditions.append({
-            'name': condition['common_name'],
-            'probability': condition['probability'],
-            'description': condition.get('hint', 'Descrição não disponível')
-        })
-    
-    recommendations = []
-    if response.get('should_stop'):
-        recommendations.append("Pare de adicionar sintomas e veja as recomendações")
-    
-    triage_level = response.get('triage_level', 'unknown')
-    if triage_level == 'emergency':
-        recommendations.append("Procure atendimento de emergência imediatamente")
-    elif triage_level == 'acute':
-        recommendations.append("Marque uma consulta médica o mais rápido possível")
-    
-    return {
-        'possible_conditions': conditions,
-        'recommendations': recommendations,
-        'analyzed_symptoms': st.session_state.user_symptoms
-    }
-# Roteamento de páginas
+
 def main():
     main_navigation()
     
@@ -316,6 +438,10 @@ def main():
         home_page()
     elif st.session_state.current_page == 'diagnosis':
         diagnosis_page()
+    elif st.session_state.current_page == 'health_units':
+        health_units_page()
+    elif st.session_state.current_page == 'epi_data':
+        epidemiological_data_page()
     elif st.session_state.current_page == 'appointments':
         appointments_page()
     elif st.session_state.current_page == 'history':
