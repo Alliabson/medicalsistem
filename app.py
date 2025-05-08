@@ -2,6 +2,8 @@ import streamlit as st
 from streamlit_option_menu import option_menu
 import pandas as pd
 import time
+from dotenv import load_dotenv
+import os
 from utils.data import get_real_diagnosis
 from utils.data import (
     available_symptoms,
@@ -11,12 +13,19 @@ from utils.data import (
     appointments_data
 )
 from utils.helpers import (
-    display_symptom_selector,
+    display_symptom_selector,  # Nome corrigido
     display_diagnosis_results,
     display_appointments,
     display_medical_history,
     display_profile
 )
+
+# Carrega variáveis de ambiente
+load_dotenv()
+
+# Configurações da API Infermedica
+INFERMEDICA_APP_ID = os.getenv('INFERMEDICA_APP_ID', 'sua_app_id')
+INFERMEDICA_APP_KEY = os.getenv('INFERMEDICA_APP_KEY', 'sua_app_key')
 
 # Configuração da página
 st.set_page_config(
