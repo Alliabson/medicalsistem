@@ -1,0 +1,15 @@
+
+## Como Implementar e Executar
+
+1. **Configuração do Ambiente**:
+   - Certifique-se de ter Python 3.9+ instalado
+   - Crie um ambiente virtual (recomendado):
+     ```bash
+     python -m venv venv
+     source venv/bin/activate  # Linux/Mac
+     venv\Scripts\activate     # Windows
+     ```
+
+2. **Instalação das Dependências**:
+   ```bash
+   pip install -r requirements.txt
