@@ -1,119 +1,88 @@
-import pandas as pd
-import random
-from datetime import datetime, timedelta
+import os
+import requests
+from fhirpy import SyncFHIRClient
+from datetime import datetime
 
-# Sintomas disponíveis
-available_symptoms = [
-    'tosse', 'febre', 'dor de cabeça', 'náusea', 'fadiga',
-    'dor abdominal', 'tontura', 'dor muscular', 'dificuldade respiratória',
-    'dor de garganta', 'perda de paladar', 'perda de olfato'
-]
+# Configurações das APIs
+INFERMEDICA_APP_ID = os.getenv('INFERMEDICA_APP_ID', 'sua_app_id')
+INFERMEDICA_APP_KEY = os.getenv('INFERMEDICA_APP_KEY', 'sua_app_key')
+INFERMEDICA_URL = 'https://api.infermedica.com/v3/'
 
-# Dados dos médicos
-doctors_data = pd.DataFrame([
-    {'id': 1, 'name': 'Ana Silva', 'specialty': 'Clínico Geral', 'appointment_type': 'online', 'next_availability': 'Hoje, 14:30'},
-    {'id': 2, 'name': 'Carlos Mendes', 'specialty': 'Cardiologia', 'appointment_type': 'presencial', 'next_availability': 'Amanhã, 10:00'},
-    {'id': 3, 'name': 'João Pereira', 'specialty': 'Ortopedia', 'appointment_type': 'presencial', 'next_availability': 'Hoje, 17:30'},
-    {'id': 4, 'name': 'Mariana Costa', 'specialty': 'Pediatria', 'appointment_type': 'online', 'next_availability': 'Amanhã, 09:00'},
-    {'id': 5, 'name': 'Roberto Alves', 'specialty': 'Clínico Geral', 'appointment_type': 'online', 'next_availability': 'Hoje, 16:00'}
-])
+FHIR_SERVER_URL = 'https://hapi.fhir.org/baseR4'
+OPENFDA_URL = 'https://api.fda.gov/drug/'
 
-# Dados de agendamentos
-appointments_data = [
-    {'id': 1, 'doctor': 'Ana Silva', 'specialty': 'Clínico Geral', 'date': '12/05/2025', 'time': '14:30', 'type': 'online', 'status': 'Agendada'},
-    {'id': 2, 'doctor': 'Carlos Mendes', 'specialty': 'Cardiologia', 'date': '20/05/2025', 'time': '10:00', 'type': 'presencial', 'status': 'Agendada'}
-]
+# Cliente FHIR
+fhir_client = SyncFHIRClient(FHIR_SERVER_URL)
 
-# Histórico médico
-medical_history = {
-    'diagnoses': [
-        {'id': 1, 'condition': 'Gripe', 'date': '03/05/2025', 'symptoms': 'febre, dor de cabeça, tosse', 'probability': 85},
-        {'id': 2, 'condition': 'Dor lombar', 'date': '22/04/2025', 'symptoms': 'dor muscular, fadiga', 'probability': 70}
-    ],
-    'past_appointments': [
-        {'id': 1, 'doctor': 'Paula Ferreira', 'specialty': 'Clínico Geral', 'date': '15/04/2025', 'type': 'Rotina', 'report': 'Consulta de rotina, paciente em boas condições'},
-        {'id': 2, 'doctor': 'Marcos Lima', 'specialty': 'Ortopedia', 'date': '02/03/2025', 'type': 'Avaliação', 'report': 'Avaliação de dor lombar, recomendado fisioterapia'}
-    ],
-    'exams': [
-        {'id': 1, 'type': 'Hemograma completo', 'date': '10/04/2025', 'results': 'Dentro dos parâmetros normais'},
-        {'id': 2, 'type': 'Raio-X Lombar', 'date': '05/03/2025', 'results': 'Leve desvio postural, sem fraturas'}
-    ]
-}
-
-# Perfil do paciente
-patient_profile = {
-    'name': 'Maria Santos',
-    'id': '12345678',
-    'birth_date': '15/03/1985',
-    'gender': 'Feminino',
-    'blood_type': 'O+',
-    'height': '1.68m',
-    'weight': '65kg',
-    'conditions': [
-        {'name': 'Asma', 'diagnosed': '2010', 'severity': 'Moderada'},
-        {'name': 'Hipertensão', 'diagnosed': '2018', 'severity': 'Leve'}
-    ],
-    'allergies': [
-        {'name': 'Penicilina', 'reaction': 'Reação severa - evitar todos os derivados'},
-        {'name': 'Pólen', 'reaction': 'Rinite alérgica sazonal'}
-    ]
-}
-
-# Função para gerar resultados de diagnóstico simulados
-def mock_diagnosis_results(symptoms):
-    possible_conditions = []
-    
-    # Condições baseadas em sintomas
-    if 'febre' in symptoms and 'tosse' in symptoms and 'dor de cabeça' in symptoms:
-        possible_conditions.append({
-            'name': 'Gripe',
-            'probability': random.uniform(0.7, 0.9),
-            'description': 'Infecção viral comum que afeta o sistema respiratório'
-        })
-        possible_conditions.append({
-            'name': 'COVID-19',
-            'probability': random.uniform(0.5, 0.8),
-            'description': 'Doença respiratória causada pelo SARS-CoV-2'
-        })
-    
-    if 'dor abdominal' in symptoms and 'náusea' in symptoms:
-        possible_conditions.append({
-            'name': 'Gastrite',
-            'probability': random.uniform(0.6, 0.8),
-            'description': 'Inflamação do revestimento do estômago'
-        })
-    
-    if 'dificuldade respiratória' in symptoms:
-        possible_conditions.append({
-            'name': 'Asma',
-            'probability': random.uniform(0.7, 0.95),
-            'description': 'Condição crônica que afeta as vias respiratórias'
-        })
-    
-    if not possible_conditions:
-        possible_conditions.append({
-            'name': 'Resfriado Comum',
-            'probability': random.uniform(0.4, 0.6),
-            'description': 'Infecção viral leve do trato respiratório superior'
-        })
-    
-    # Ordenar por probabilidade
-    possible_conditions.sort(key=lambda x: x['probability'], reverse=True)
-    
-    # Recomendações gerais
-    recommendations = [
-        'Hidrate-se adequadamente',
-        'Descanse o suficiente',
-        'Monitore seus sintomas'
-    ]
-    
-    if any(p['probability'] > 0.7 for p in possible_conditions):
-        recommendations.append('Considere marcar uma consulta com um médico para avaliação')
-    if 'dificuldade respiratória' in symptoms:
-        recommendations.append('Procure atendimento de emergência se a dificuldade respiratória piorar')
-    
+def get_infermedica_headers():
     return {
-        'possible_conditions': possible_conditions,
-        'recommendations': recommendations,
-        'analyzed_symptoms': symptoms
+        'App-Id': INFERMEDICA_APP_ID,
+        'App-Key': INFERMEDICA_APP_KEY,
+        'Content-Type': 'application/json'
     }
+
+# Função para diagnóstico real usando Infermedica
+def get_real_diagnosis(symptoms, age, sex):
+    url = f"{INFERMEDICA_URL}diagnosis"
+    
+    data = {
+        "sex": sex,
+        "age": {"value": age},
+        "evidence": [{"id": sym, "choice_id": "present"} for sym in symptoms]
+    }
+    
+    try:
+        response = requests.post(url, json=data, headers=get_infermedica_headers())
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Erro na API Infermedica: {e}")
+        return None
+
+# Função para buscar informações de medicamentos na OpenFDA
+def get_drug_info(drug_name):
+    url = f"{OPENFDA_URL}label.json?search=openfda.brand_name:{drug_name}&limit=1"
+    
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get('results'):
+            drug = data['results'][0]
+            return {
+                'name': drug.get('openfda', {}).get('brand_name', [drug_name])[0],
+                'indications': drug.get('indications_and_usage', ['Informação não disponível']),
+                'warnings': drug.get('warnings', ['Nenhum alerta específico']),
+                'side_effects': drug.get('adverse_reactions', ['Nenhum efeito colateral relatado'])
+            }
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"Erro na API OpenFDA: {e}")
+        return None
+
+# Função para salvar dados no servidor FHIR
+def save_to_fhir(resource_type, data):
+    try:
+        resource = fhir_client.resource(resource_type, **data)
+        resource.save()
+        return resource.id
+    except Exception as e:
+        print(f"Erro ao salvar no FHIR: {e}")
+        return None
+
+# Função para buscar histórico médico no FHIR
+def get_fhir_history(patient_id):
+    try:
+        patient = fhir_client.resource('Patient', id=patient_id)
+        conditions = fhir_client.resources('Condition').search(subject=f'Patient/{patient_id}').fetch()
+        appointments = fhir_client.resources('Appointment').search(actor=f'Patient/{patient_id}').fetch()
+        
+        return {
+            'patient': patient.serialize(),
+            'conditions': [c.serialize() for c in conditions],
+            'appointments': [a.serialize() for a in appointments]
+        }
+    except Exception as e:
+        print(f"Erro ao buscar no FHIR: {e}")
+        return None
