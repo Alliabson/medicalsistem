@@ -2,6 +2,7 @@ import streamlit as st
 from streamlit_option_menu import option_menu
 import pandas as pd
 import time
+from utils.data import get_real_diagnosis
 from utils.data import (
     available_symptoms,
     mock_diagnosis_results,
@@ -129,12 +130,31 @@ def diagnosis_page():
     # Seletor de sintomas
     display_symptom_selector()
     
+    # Informações adicionais para diagnóstico preciso
+    with st.expander("Informações adicionais para diagnóstico preciso"):
+        age = st.number_input("Idade", min_value=0, max_value=120, value=30)
+        sex = st.radio("Sexo biológico", ["male", "female"], format_func=lambda x: "Masculino" if x == "male" else "Feminino")
+    
     # Botão de análise
     if st.button("Analisar Sintomas", 
                 disabled=len(st.session_state.user_symptoms) == 0,
                 type="primary",
                 use_container_width=True):
         st.session_state.is_loading = True
+        
+        # Usar API real se disponível, senão usar mock
+        if INFERMEDICA_APP_ID != 'sua_app_id':
+            diagnosis_data = get_real_diagnosis(st.session_state.user_symptoms, age, sex)
+            if diagnosis_data:
+                st.session_state.diagnosis_results = process_infermedica_response(diagnosis_data)
+            else:
+                st.session_state.diagnosis_results = mock_diagnosis_results(st.session_state.user_symptoms)
+                st.warning("Usando dados simulados devido a erro na API")
+        else:
+            st.session_state.diagnosis_results = mock_diagnosis_results(st.session_state.user_symptoms)
+            st.info("Usando dados simulados. Configure as credenciais da API para diagnóstico real.")
+        
+        st.session_state.is_loading = False
         st.rerun()
     
     # Simulação de carregamento
@@ -254,7 +274,31 @@ def history_page():
 def profile_page():
     st.title("👤 Perfil do Paciente")
     display_profile()
-
+def process_infermedica_response(response):
+    """Processa a resposta da API Infermedica para o formato do nosso app"""
+    conditions = []
+    for condition in response.get('conditions', []):
+        conditions.append({
+            'name': condition['common_name'],
+            'probability': condition['probability'],
+            'description': condition.get('hint', 'Descrição não disponível')
+        })
+    
+    recommendations = []
+    if response.get('should_stop'):
+        recommendations.append("Pare de adicionar sintomas e veja as recomendações")
+    
+    triage_level = response.get('triage_level', 'unknown')
+    if triage_level == 'emergency':
+        recommendations.append("Procure atendimento de emergência imediatamente")
+    elif triage_level == 'acute':
+        recommendations.append("Marque uma consulta médica o mais rápido possível")
+    
+    return {
+        'possible_conditions': conditions,
+        'recommendations': recommendations,
+        'analyzed_symptoms': st.session_state.user_symptoms
+    }
 # Roteamento de páginas
 def main():
     main_navigation()
