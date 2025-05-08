@@ -1,0 +1,70 @@
+/* Estilos gerais */
+.stApp {
+    background-color: #f8f9fa;
+}
+
+/* Cabeçalhos */
+h1 {
+    color: #0d6efd;
+}
+
+/* Cartões */
+.stContainer {
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.stContainer:hover {
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+}
+
+/* Botões */
+.stButton>button {
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.stButton>button:hover {
+    transform: translateY(-2px);
+}
+
+/* Barra de navegação */
+[data-testid="stSidebar"] {
+    background-color: #f8f9fa;
+    border-right: 1px solid #dee2e6;
+}
+
+/* Ícones */
+.icon {
+    color: #0d6efd;
+}
+
+/* Progresso */
+.stProgress>div>div>div {
+    background-color: #0d6efd;
+}
+
+/* Abas */
+[role="tablist"] button {
+    border-radius: 8px 8px 0 0 !important;
+}
+
+[role="tablist"] button[aria-selected="true"] {
+    background-color: #0d6efd;
+    color: white;
+}
+
+/* Formulários */
+.stTextInput>div>div>input, 
+.stTextArea>div>div>textarea,
+.stSelectbox>div>div>select,
+.stDateInput>div>div>input {
+    border-radius: 8px !important;
+    border: 1px solid #ced4da !important;
+}
+
+/* Mensagens */
+.stAlert {
+    border-radius: 8px;
+}
