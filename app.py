@@ -1,3 +1,5 @@
+# app.py (versão com correção definitiva de SyntaxError)
+
 import streamlit as st
 from streamlit_option_menu import option_menu
 import pandas as pd
@@ -7,7 +9,6 @@ from datetime import datetime
 import urllib.parse
 
 # --- DADOS E LÓGICA ---
-
 disease_database = {
     'COVID-19': {'symptoms': {'febre', 'tosse', 'cansaço', 'perda de paladar ou olfato', 'dificuldade respiratória', 'dor de cabeça', 'dor muscular'}, 'description': 'Infecção respiratória viral causada pelo SARS-CoV-2.', 'base_probability': 0.4},
     'Amigdalite': {'symptoms': {'dor de garganta', 'febre', 'dificuldade para engolir', 'gânglios inchados', 'dor de cabeça'}, 'description': 'Inflamação das amígdalas, geralmente por infecção viral ou bacteriana.', 'base_probability': 0.6},
@@ -16,7 +17,6 @@ disease_database = {
     'Resfriado Comum': {'symptoms': {'coriza', 'espirros', 'tosse', 'dor de garganta'}, 'description': 'Infecção viral leve do nariz e da garganta.', 'base_probability': 0.8},
     'Sinusite': {'symptoms': {'dor de cabeça', 'congestão nasal', 'pressão facial', 'coriza', 'tosse'}, 'description': 'Inflamação dos seios nasais, que pode ser causada por infecção ou alergia.', 'base_probability': 0.6}
 }
-
 condition_to_specialty = {
     'COVID-19': 'Clínico Geral',
     'Amigdalite': 'Otorrinolaringologista',
@@ -26,7 +26,6 @@ condition_to_specialty = {
     'Sinusite': 'Otorrinolaringologista',
     'Condição Não Especificada': 'Clínico Geral'
 }
-
 all_symptoms = sorted(list(set(symptom for disease in disease_database.values() for symptom in disease['symptoms'])))
 ufs_brasil = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO']
 
@@ -49,16 +48,9 @@ def generate_diagnosis(symptoms):
             probability = data['base_probability'] * match_percentage
             if 'dificuldade respiratória' in matching_symptoms and disease == 'COVID-19':
                 probability *= 1.5
-            possible_conditions.append({
-                'name': disease, 'probability': round(min(probability, 0.95), 2),
-                'description': data['description'], 'matching_symptoms': list(matching_symptoms)
-            })
+            possible_conditions.append({'name': disease, 'probability': round(min(probability, 0.95), 2), 'description': data['description'], 'matching_symptoms': list(matching_symptoms)})
     if not possible_conditions and symptoms:
-        possible_conditions.append({
-            'name': 'Condição Não Especificada', 'probability': 0.2,
-            'description': 'Os sintomas não correspondem a uma condição na base. Consulte um clínico geral.',
-            'matching_symptoms': symptoms
-        })
+        possible_conditions.append({'name': 'Condição Não Especificada', 'probability': 0.2, 'description': 'Os sintomas não correspondem a uma condição na base. Consulte um clínico geral.', 'matching_symptoms': symptoms})
     possible_conditions.sort(key=lambda x: x['probability'], reverse=True)
     recommendations = {'Hidrate-se', 'Descanse'}
     if any(c['probability'] > 0.7 for c in possible_conditions):
@@ -73,7 +65,7 @@ def get_health_units(uf, city):
     if not uf or not city:
         return None
     try:
-        url = f"https://apidadosabertos.saude.gov.br/cnes/estabelecimentos?municipio={city.replace(' ', '%20')}&uf={uf}"
+        url = f"https://apidadosabertos.saude.gov.br/cnes/estabelecimentos?municipio={urllib.parse.quote(city)}&uf={uf}"
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         return response.json().get('estabelecimentos', [])
@@ -85,15 +77,12 @@ def get_health_units(uf, city):
 def diagnosis_page():
     st.title("🔍 Diagnóstico de Sintomas")
     st.markdown("Selecione os sintomas que você está sentindo para receber uma análise preliminar.")
-    
     user_symptoms = st.multiselect("Selecione seus sintomas:", options=all_symptoms)
-    
     if st.button("Analisar Sintomas", disabled=not user_symptoms, type="primary"):
         with st.spinner("Analisando..."):
             time.sleep(1)
             st.session_state.diagnosis_results = generate_diagnosis(user_symptoms)
             st.session_state.health_units = None
-    
     if st.session_state.diagnosis_results:
         results = st.session_state.diagnosis_results
         st.divider()
@@ -103,46 +92,38 @@ def diagnosis_page():
                 st.subheader(f"{condition['name']} - Probabilidade: {int(condition['probability'] * 100)}%")
                 st.progress(condition['probability'])
                 st.write(f"*{condition['description']}*")
-        
         st.divider()
         st.subheader("🚀 O que fazer agora?")
-
         top_condition = results['possible_conditions'][0]['name'] if results['possible_conditions'] else 'Condição Não Especificada'
         recommended_specialty = condition_to_specialty.get(top_condition, 'Clínico Geral')
-
         st.markdown(f"##### Opção 1: Encontre um especialista para Telemedicina")
         query_text = urllib.parse.quote_plus(f"{recommended_specialty} telemedicina")
         
-        # AQUI ESTÁ A CORREÇÃO DA SINTAXE
+        # ▼▼▼ AQUI ESTÁ A LINHA CORRIGIDA ▼▼▼
         Google Search_url = f"https://www.google.com/search?q={query_text}"
         
         st.link_button(f"Buscar {recommended_specialty}s Online no Google", Google Search_url, use_container_width=True)
         st.caption("Esta busca é ampla e incluirá diversas plataformas e médicos.")
-
         st.markdown("<br>", unsafe_allow_html=True)
-
         with st.expander("Opção 2: Encontre uma unidade de saúde na sua cidade"):
             col1, col2 = st.columns(2)
             with col1:
                 uf_selected = st.selectbox("Selecione seu Estado (UF)", ufs_brasil)
             with col2:
                 city_input = st.text_input("Digite o nome da sua Cidade")
-
             if st.button("Buscar Unidades de Saúde Locais"):
                 st.session_state.health_units = get_health_units(uf_selected, city_input)
-            
             if st.session_state.health_units is not None:
                 if not st.session_state.health_units:
                     st.warning("Nenhuma unidade de saúde encontrada para esta cidade. Verifique o nome digitado.")
                 else:
                     st.success(f"{len(st.session_state.health_units)} unidades encontradas em {city_input}-{uf_selected}:")
-                    for unit in st.session_state.health_unites[:5]:
+                    for unit in st.session_state.health_units[:5]:
                         with st.container(border=True):
                             st.subheader(unit.get('noFantasia', 'Nome não disponível'))
                             st.write(f"**Tipo:** {unit.get('dsTipoUnidade', 'N/A')}")
                             st.write(f"**Endereço:** {unit.get('noLogradouro', '')}, {unit.get('nuEndereco', '')} - {unit.get('noBairro', '')}")
                             st.write(f"**Telefone:** {unit.get('nuTelefone', 'Não informado')}")
-        
         st.divider()
         st.subheader("Recomendações Gerais de Saúde")
         for rec in results.get('recommendations', []):
@@ -154,7 +135,6 @@ def diagnosis_page():
 def info_page():
     st.title("ℹ️ Sobre o MediAssist")
     st.markdown("""O **MediAssist** é uma ferramenta de triagem inicial projetada para ajudar os usuários a entenderem melhor seus sintomas.""")
-
 
 # --- NAVEGAÇÃO E EXECUÇÃO ---
 def main():
