@@ -70,11 +70,10 @@ def generate_diagnosis(symptoms):
     return {'possible_conditions': possible_conditions, 'recommendations': list(recommendations), 'analyzed_symptoms': symptoms}
 
 def get_health_units(uf, city):
-    """Busca unidades de saúde na API do Dados Abertos do Gov (CNES)."""
     if not uf or not city:
         return None
     try:
-        url = f"https://apidadosabertos.saude.gov.br/cnes/estabelecimentos?municipio={city}&uf={uf}"
+        url = f"https://apidadosabertos.saude.gov.br/cnes/estabelecimentos?municipio={city.replace(' ', '%20')}&uf={uf}"
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         return response.json().get('estabelecimentos', [])
@@ -93,7 +92,7 @@ def diagnosis_page():
         with st.spinner("Analisando..."):
             time.sleep(1)
             st.session_state.diagnosis_results = generate_diagnosis(user_symptoms)
-            st.session_state.health_units = None # Limpa busca anterior de unidades
+            st.session_state.health_units = None
     
     if st.session_state.diagnosis_results:
         results = st.session_state.diagnosis_results
@@ -111,16 +110,17 @@ def diagnosis_page():
         top_condition = results['possible_conditions'][0]['name'] if results['possible_conditions'] else 'Condição Não Especificada'
         recommended_specialty = condition_to_specialty.get(top_condition, 'Clínico Geral')
 
-        # --- OPÇÃO 1: BUSCA ONLINE UNIVERSAL (GOOGLE) ---
         st.markdown(f"##### Opção 1: Encontre um especialista para Telemedicina")
         query_text = urllib.parse.quote_plus(f"{recommended_specialty} telemedicina")
+        
+        # AQUI ESTÁ A CORREÇÃO DA SINTAXE
         Google Search_url = f"https://www.google.com/search?q={query_text}"
+        
         st.link_button(f"Buscar {recommended_specialty}s Online no Google", Google Search_url, use_container_width=True)
         st.caption("Esta busca é ampla e incluirá diversas plataformas e médicos.")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # --- OPÇÃO 2: BUSCA LOCAL (CNES) ---
         with st.expander("Opção 2: Encontre uma unidade de saúde na sua cidade"):
             col1, col2 = st.columns(2)
             with col1:
@@ -136,7 +136,7 @@ def diagnosis_page():
                     st.warning("Nenhuma unidade de saúde encontrada para esta cidade. Verifique o nome digitado.")
                 else:
                     st.success(f"{len(st.session_state.health_units)} unidades encontradas em {city_input}-{uf_selected}:")
-                    for unit in st.session_state.health_units[:5]: # Mostra as 5 primeiras
+                    for unit in st.session_state.health_unites[:5]:
                         with st.container(border=True):
                             st.subheader(unit.get('noFantasia', 'Nome não disponível'))
                             st.write(f"**Tipo:** {unit.get('dsTipoUnidade', 'N/A')}")
