@@ -6,7 +6,7 @@ import requests
 from datetime import datetime
 import re # Usado para criar URLs amigáveis
 
-# --- DADOS E LÓGICA (Anteriormente em utils/data.py) ---
+# --- DADOS E LÓGICA ---
 
 disease_database = {
     'COVID-19': {'symptoms': {'febre', 'tosse', 'cansaço', 'perda de paladar ou olfato', 'dificuldade respiratória', 'dor de cabeça', 'dor muscular'}, 'description': 'Infecção respiratória viral causada pelo SARS-CoV-2.', 'base_probability': 0.4},
@@ -17,7 +17,6 @@ disease_database = {
     'Sinusite': {'symptoms': {'dor de cabeça', 'congestão nasal', 'pressão facial', 'coriza', 'tosse'}, 'description': 'Inflamação dos seios nasais, que pode ser causada por infecção ou alergia.', 'base_probability': 0.6}
 }
 
-# NOVO MAPEAMENTO: De Condição para Especialidade Médica
 condition_to_specialty = {
     'COVID-19': 'Clínico Geral',
     'Amigdalite': 'Otorrinolaringologista',
@@ -43,7 +42,7 @@ if 'diagnosis_results' not in st.session_state:
 if 'is_loading' not in st.session_state:
     st.session_state.is_loading = False
 
-# --- LÓGICA DE DIAGNÓSTICO (sem alterações) ---
+# --- LÓGICA DE DIAGNÓSTICO ---
 def generate_diagnosis(symptoms):
     user_symptoms_set = set(symptoms)
     possible_conditions = []
@@ -77,8 +76,8 @@ def generate_diagnosis(symptoms):
 # --- FUNÇÃO AUXILIAR PARA CRIAR URL ---
 def slugify(text):
     text = text.lower()
-    text = re.sub(r'[\s\(\)]+', '-', text)  # Substitui espaços e parênteses por hífen
-    text = re.sub(r'[^a-z0-9-]', '', text) # Remove caracteres não alfanuméricos exceto hífen
+    text = re.sub(r'[\s\(\)]+', '-', text)
+    text = re.sub(r'[^a-z0-9-]', '', text)
     return text
 
 # --- PÁGINAS DO APP ---
@@ -88,7 +87,7 @@ def diagnosis_page():
     st.session_state.user_symptoms = st.multiselect("Selecione seus sintomas:", options=all_symptoms, default=st.session_state.user_symptoms)
     if st.button("Analisar Sintomas", disabled=not st.session_state.user_symptoms, type="primary"):
         st.session_state.is_loading = True
-        st.session_state.diagnosis_results = None # Limpa resultados antigos
+        st.session_state.diagnosis_results = None
         st.rerun()
     if st.session_state.is_loading:
         with st.spinner("Analisando..."):
@@ -103,7 +102,6 @@ def diagnosis_page():
         st.info(f"**Sintomas Analisados:** {', '.join(results['analyzed_symptoms'])}")
         st.divider()
 
-        # Exibe as condições
         for condition in results.get('possible_conditions', []):
             with st.container(border=True):
                 st.subheader(f"{condition['name']} - Probabilidade: {int(condition['probability'] * 100)}%")
@@ -111,32 +109,18 @@ def diagnosis_page():
                 st.write(f"*{condition['description']}*")
         
         st.divider()
-
-        # NOVA SEÇÃO: AÇÃO RECOMENDADA COM BASE NO DIAGNÓSTICO
         st.subheader("🚀 Próximo Passo: Encontre um Especialista")
         top_condition = results['possible_conditions'][0]['name']
         recommended_specialty = condition_to_specialty.get(top_condition, 'Clínico Geral')
         
         st.success(f"Com base na sua análise, a especialidade recomendada é **{recommended_specialty}**.")
         
-        # Cria a URL para a Doctoralia (exemplo)
         specialty_slug = slugify(recommended_specialty)
         doctoralia_url = f"https://www.doctoralia.com.br/especialistas/telemedicina/{specialty_slug}"
         
         st.markdown(f"""
-        Clique no botão abaixo para ver uma lista de especialistas disponíveis para teleconsulta.
-        
-        <a href="{doctoralia_url}" target="_blank">
-            <button style="
-                width: 100%; 
-                padding: 10px; 
-                font-size: 18px; 
-                font-weight: bold; 
-                color: white; 
-                background-color: #0d6efd; 
-                border: none; 
-                border-radius: 5px; 
-                cursor: pointer;">
+        <a href="{doctoralia_url}" target="_blank" style="text-decoration: none;">
+            <button style="width: 100%; padding: 12px; font-size: 18px; font-weight: bold; color: white; background-color: #0d6efd; border: none; border-radius: 5px; cursor: pointer;">
                 Buscar {recommended_specialty}s Online
             </button>
         </a>
@@ -145,7 +129,12 @@ def diagnosis_page():
         st.divider()
         st.subheader("Recomendações Gerais")
         for rec in results.get('recommendations', []):
-            st.warning(rec) if "ATENÇÃO" in rec else st.success(f"✅ {rec}")
+            # AQUI ESTÁ A CORREÇÃO:
+            if "ATENÇÃO" in rec:
+                st.warning(f"⚠️ {rec}")
+            else:
+                st.success(f"✅ {rec}")
+                
         st.caption("Aviso: Este diagnóstico não substitui a avaliação de um profissional de saúde.")
 
 def info_page():
