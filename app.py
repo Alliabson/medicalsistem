@@ -1,4 +1,4 @@
-# app.py (versão com correção definitiva de SyntaxError)
+# app.py (versão com linhas de diagnóstico)
 
 import streamlit as st
 from streamlit_option_menu import option_menu
@@ -94,16 +94,21 @@ def diagnosis_page():
                 st.write(f"*{condition['description']}*")
         st.divider()
         st.subheader("🚀 O que fazer agora?")
-        top_condition = results['possible_conditions'][0]['name'] if results['possible_conditions'] else 'Condição Não Especificada'
-        recommended_specialty = condition_to_specialty.get(top_condition, 'Clínico Geral')
-        st.markdown(f"##### Opção 1: Encontre um especialista para Telemedicina")
-        query_text = urllib.parse.quote_plus(f"{recommended_specialty} telemedicina")
         
-        # ▼▼▼ AQUI ESTÁ A LINHA CORRIGIDA ▼▼▼
-        Google Search_url = f"https://www.google.com/search?q={query_text}"
-        
-        st.link_button(f"Buscar {recommended_specialty}s Online no Google", Google Search_url, use_container_width=True)
-        st.caption("Esta busca é ampla e incluirá diversas plataformas e médicos.")
+        # --- INÍCIO DAS LINHAS DE DIAGNÓSTICO ---
+        st.write("--- DADOS PARA DIAGNÓSTICO DO ERRO ---")
+        st.json(results) # Imprime o dicionário de resultados completo
+        st.write("--- FIM DOS DADOS PARA DIAGNÓSTICO ---")
+        # --- FIM DAS LINHAS DE DIAGNÓSTICO ---
+
+        if results.get('possible_conditions'):
+            top_condition = results['possible_conditions'][0]['name']
+            recommended_specialty = condition_to_specialty.get(top_condition, 'Clínico Geral')
+            st.markdown(f"##### Opção 1: Encontre um especialista para Telemedicina")
+            query_text = urllib.parse.quote_plus(f"{recommended_specialty} telemedicina")
+            Google Search_url = f"https://www.google.com/search?q={query_text}"
+            st.link_button(f"Buscar {recommended_specialty}s Online no Google", Google Search_url, use_container_width=True)
+            st.caption("Esta busca é ampla e incluirá diversas plataformas e médicos.")
         st.markdown("<br>", unsafe_allow_html=True)
         with st.expander("Opção 2: Encontre uma unidade de saúde na sua cidade"):
             col1, col2 = st.columns(2)
@@ -115,15 +120,13 @@ def diagnosis_page():
                 st.session_state.health_units = get_health_units(uf_selected, city_input)
             if st.session_state.health_units is not None:
                 if not st.session_state.health_units:
-                    st.warning("Nenhuma unidade de saúde encontrada para esta cidade. Verifique o nome digitado.")
+                    st.warning("Nenhuma unidade de saúde encontrada.")
                 else:
-                    st.success(f"{len(st.session_state.health_units)} unidades encontradas em {city_input}-{uf_selected}:")
+                    st.success(f"{len(st.session_state.health_units)} unidades encontradas:")
                     for unit in st.session_state.health_units[:5]:
                         with st.container(border=True):
                             st.subheader(unit.get('noFantasia', 'Nome não disponível'))
-                            st.write(f"**Tipo:** {unit.get('dsTipoUnidade', 'N/A')}")
-                            st.write(f"**Endereço:** {unit.get('noLogradouro', '')}, {unit.get('nuEndereco', '')} - {unit.get('noBairro', '')}")
-                            st.write(f"**Telefone:** {unit.get('nuTelefone', 'Não informado')}")
+                            st.write(f"**Endereço:** {unit.get('noLogradouro', '')}, {unit.get('nuEndereco', '')}")
         st.divider()
         st.subheader("Recomendações Gerais de Saúde")
         for rec in results.get('recommendations', []):
@@ -134,7 +137,7 @@ def diagnosis_page():
 
 def info_page():
     st.title("ℹ️ Sobre o MediAssist")
-    st.markdown("""O **MediAssist** é uma ferramenta de triagem inicial projetada para ajudar os usuários a entenderem melhor seus sintomas.""")
+    st.markdown("""O **MediAssist** é uma ferramenta de triagem inicial...""")
 
 # --- NAVEGAÇÃO E EXECUÇÃO ---
 def main():
