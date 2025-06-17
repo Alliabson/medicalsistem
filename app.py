@@ -106,8 +106,8 @@ def diagnosis_page():
             recommended_specialty = condition_to_specialty.get(top_condition, 'Clínico Geral')
             st.markdown(f"##### Opção 1: Encontre um especialista para Telemedicina")
             query_text = urllib.parse.quote_plus(f"{recommended_specialty} telemedicina")
-            Google Search_url = f"https://www.google.com/search?q={query_text}"
-            st.link_button(f"Buscar {recommended_specialty}s Online no Google", Google Search_url, use_container_width=True)
+            google_search_url = f"https://www.google.com/search?q={query_text}"
+            st.link_button(f"Buscar {recommended_specialty}s Online no Google", google_search_url, use_container_width=True)
             st.caption("Esta busca é ampla e incluirá diversas plataformas e médicos.")
         st.markdown("<br>", unsafe_allow_html=True)
         with st.expander("Opção 2: Encontre uma unidade de saúde na sua cidade"):
